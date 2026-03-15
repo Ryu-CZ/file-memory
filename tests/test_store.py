@@ -4,7 +4,13 @@ import json
 
 import pytest
 
-from file_memory.store import MemoryNotFoundError, MemoryStore, MemoryStoreError
+from file_memory.store import (
+    MemoryKeyError,
+    MemoryNotFoundError,
+    MemoryParseError,
+    MemoryStore,
+    MemoryStoreError,
+)
 
 
 class TestMemoryStoreInit:
@@ -199,3 +205,115 @@ class TestTags:
 
         tags = memory_store.tags()
         assert tags == {"a", "b", "c"}
+
+
+class TestKeyValidation:
+    """Tests for key validation and collision detection."""
+
+    def test_store_empty_key_raises(self, memory_store):
+        """Test storing with empty key raises error."""
+        with pytest.raises(MemoryKeyError):
+            memory_store.store("", {"data": "value"})
+
+    def test_store_key_with_special_chars(self, memory_store):
+        """Test storing key with special characters works."""
+        entry = memory_store.store("key@with#special!", {"data": "value"})
+        assert entry.metadata.key == "key@with#special!"
+
+    def test_key_collision_detection(self, memory_store):
+        """Test key collision is detected."""
+        memory_store.store("my key", {"data": "value1"})
+
+        with pytest.raises(MemoryKeyError):
+            memory_store.store("my:key", {"data": "value2"})
+
+    def test_update_preserves_key(self, memory_store):
+        """Test update doesn't trigger collision for same key."""
+        memory_store.store("test_key", {"v": 1})
+        entry = memory_store.update("test_key", {"v": 2})
+        assert entry.metadata.key == "test_key"
+
+
+class TestOrdering:
+    """Tests for deterministic ordering."""
+
+    def test_list_returns_sorted(self, memory_store):
+        """Test list returns memories in sorted order."""
+        memory_store.store("zebra", {"data": "z"})
+        memory_store.store("apple", {"data": "a"})
+        memory_store.store("mango", {"data": "m"})
+
+        entries = list(memory_store.list())
+        keys = [e.metadata.key for e in entries]
+
+        assert keys == ["apple", "mango", "zebra"]
+
+    def test_search_returns_sorted(self, memory_store):
+        """Test search returns memories in sorted order."""
+        memory_store.store("zebra", {"data": "hello"})
+        memory_store.store("apple", {"data": "hello"})
+        memory_store.store("mango", {"data": "hello"})
+
+        results = list(memory_store.search("hello"))
+        keys = [e.metadata.key for e in results]
+
+        assert keys == ["apple", "mango", "zebra"]
+
+
+class TestLegacyFormat:
+    """Tests for legacy format compatibility."""
+
+    def test_read_legacy_json(self, memory_store, tmp_memory_dir):
+        """Test reading legacy JSON format (v0)."""
+        legacy_data = {
+            "metadata": {
+                "key": "legacy_key",
+                "format": "json",
+                "created_at": "2024-01-01T00:00:00",
+                "updated_at": "2024-01-01T00:00:00",
+                "tags": ["legacy"],
+            },
+            "content": '{"old": "data"}',
+        }
+
+        file_path = tmp_memory_dir / "legacy_key.json"
+        file_path.write_text(json.dumps(legacy_data))
+
+        entry = memory_store.get("legacy_key")
+
+        assert entry.metadata.key == "legacy_key"
+        assert entry.metadata.tags == ["legacy"]
+        assert "old" in entry.content
+
+
+class TestCorruptedFiles:
+    """Tests for corrupted file handling."""
+
+    def test_list_skips_corrupted_json(self, memory_store, tmp_memory_dir):
+        """Test list skips corrupted JSON files."""
+        corrupted = tmp_memory_dir / "corrupted.json"
+        corrupted.write_text("{ invalid json")
+
+        entries = list(memory_store.list())
+        assert len(entries) == 0
+
+    def test_get_corrupted_raises(self, memory_store, tmp_memory_dir):
+        """Test get on corrupted file raises error."""
+        corrupted = tmp_memory_dir / "bad.json"
+        corrupted.write_text("{ invalid json")
+
+        with pytest.raises(MemoryParseError):
+            memory_store.get("bad")
+
+
+class TestSchemaVersion:
+    """Tests for schema versioning."""
+
+    def test_stored_file_has_schema_version(self, memory_store):
+        """Test stored files include schema version."""
+        memory_store.store("test", {"key": "value"})
+
+        file_path = memory_store.base_dir / "test.json"
+        data = json.loads(file_path.read_text())
+
+        assert data["schema_version"] == 1
