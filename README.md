@@ -158,10 +158,17 @@ file-memory search "auth"
 ```
 
 Slash commands (if configured):
-- `/memory-store` - Store a new memory
-- `/memory-get` - Retrieve a memory
-- `/memory-list` - List all memories
-- `/memory-search` - Search memories
+
+**Agentic access** (recommended for most use):
+- `/memory-recall` - Intelligent recall with search and ranked results
+- `/memory-capture` - Intelligent storage with read-before-write workflow
+- `/memory-maintenance` - Consolidate memories and process deferred work
+
+**Direct access** (manual primitives):
+- `/mem-store` - Direct write without intelligent processing
+- `/mem-get` - Direct retrieval by exact key
+- `/mem-list` - Direct enumeration of all memories
+- `/mem-search` - Direct raw text search
 
 ## Storage Format
 
