@@ -1,27 +1,102 @@
-# File memory for OpenCode
+# File Memory for OpenCode - Design Document
 
-This project integrates new feature for OpenCode that dedicates one directory 
-where OpenCode can store shared knwoledge. For example if user prefers some 
-kind of code style. User can ask to list all file_memory and to store anything in file_memory.
+## Overview
 
-Design:
-- default shared directory file_memory is `~/Documents/opencode/file_memory`
-- opencode has to decide what is optimal file format, "json" or "markdown"
-- opencode has to decide how is this feature integrated to opencode itself? for exmaple as plain skill or even as 
-speciaslised subagent who has this skill/feature enabled by deafault, so it can later run on local model
+File Memory is a persistent storage solution for OpenCode that allows storing shared knowledge across sessions and projects. It's designed as a simple, file-based key-value store with support for JSON and Markdown formats.
 
-Implementation
-- This skill is impelemented for owner of this PC exclusively, so you can do custom setup.
-- Based on design Opencode plan and implements this feature and tests it.
-- There is ollama available if you want it to use with small models prepared.
-- You can ask for other resources if needed.
-- To be clear you opencode is full product owner of this skill and 
-make all decisions because youa re the one who know yourself the 
-best, or atleast are able to efectively search your online documentation.
+## Goals
 
-Notes:
-Think I as user want to store in gfile_memory are for exampel progress of each project, long term goals, info 
-about interesting tools i develop for you opencode so you can test them from other sessions. In plan to develop s lot 
-of improvements and tools you can use but i will place them in separate projects so I want you to have
- one place where you can discover them as a starting point. Later we may replace file memory with something more 
-sophisticated but it looks like useful basic tool I may want to keep in for simple stuff to store.
+1. **Persistence**: Memories survive across OpenCode sessions
+2. **Simplicity**: No database required, files are human-readable
+3. **Flexibility**: Support both structured data (JSON) and notes (Markdown)
+4. **Discoverability**: Tags and search for finding relevant memories
+5. **Integration**: Seamless OpenCode skill and command support
+
+## Architecture
+
+### Storage Model
+
+- **Directory**: `~/Documents/opencode/file_memory` (configurable)
+- **File per Memory**: Each memory stored as `key.json` or `key.md`
+- **Format**: JSON with schema versioning, Markdown with YAML frontmatter
+
+### Schema Versioning
+
+Current version: `1`
+
+| Version | Format | Status |
+|---------|--------|--------|
+| 0 | Legacy | Read-only support |
+| 1 | Current | Full support |
+
+### Key Design Decisions
+
+1. **One file per memory**: Simplifies management, enables git-friendly storage
+2. **Sanitized filenames**: Keys are sanitized for filesystem safety
+3. **Collision detection**: Prevents overwriting unrelated keys
+4. **Frontmatter for Markdown**: Standard YAML frontmatter with metadata
+
+## Data Models
+
+### MemoryMetadata
+
+```python
+{
+    "key": str,           # Original key (not sanitized)
+    "format": str,        # "json" or "markdown"
+    "created_at": datetime,
+    "updated_at": datetime,
+    "tags": list[str]
+}
+```
+
+### MemoryEntry
+
+```python
+{
+    "metadata": MemoryMetadata,
+    "content": str       # JSON object as Python dict, or markdown string
+}
+```
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `store` | Store a new memory |
+| `get` | Retrieve a memory |
+| `list-memories` | List all memories |
+| `update` | Update existing memory |
+| `delete` | Delete a memory |
+| `search` | Search by content |
+| `list-tags` | List all tags |
+| `init` | Initialize directory |
+
+## Error Handling
+
+| Exception | Use Case |
+|-----------|----------|
+| `MemoryStoreError` | General storage errors |
+| `MemoryNotFoundError` | Key doesn't exist |
+| `MemoryKeyError` | Invalid key or collision |
+| `MemoryParseError` | Corrupted file |
+
+## Future Considerations
+
+- [ ] Add encryption for sensitive data
+- [ ] Support for nested/hierarchical keys
+- [ ] Export/import functionality
+- [ ] Sync mechanism for multiple machines
+- [ ] Web interface for manual editing
+
+## Alternatives Considered
+
+1. **SQLite**: More complex, requires additional dependency
+2. **Redis**: Requires server, not persistent by default
+3. **Flat JSON file**: Less human-readable, harder to edit manually
+4. **Database**: Overkill for this use case
+
+## References
+
+- OpenCode Skills: https://opencode.ai/docs/skills/
+- OpenCode Commands: https://opencode.ai/docs/commands/

@@ -11,28 +11,26 @@ A persistent storage solution for OpenCode that allows sharing knowledge across 
 - **CLI & Python API**: Use via command line or import as a library
 - **OpenCode Integration**: Built-in skill and commands for seamless OpenCode usage
 
-## Installation
+## Quick Start
 
-### Quick Install
-
-```bash
-pip install file-memory
-```
-
-### Development Install
+### Installation
 
 ```bash
+# Clone this repository
 git clone https://github.com/yourusername/file-memory.git
 cd file-memory
+
+# Install in development mode
 pip install -e ".[dev]"
+
+# Or install globally (requires pipx or venv)
+pipx install -e .
 ```
 
-## Usage
-
-### CLI Commands
+### Basic Usage
 
 ```bash
-# Initialize the memory directory
+# Initialize (creates memory directory)
 file-memory init
 
 # Store a memory (JSON)
@@ -43,6 +41,9 @@ file-memory store notes "# My Notes" --format markdown
 
 # Store with tags
 file-memory store my_key '{"data": "value"}' --tags project,important
+
+# Store from file
+file-memory store config --file /path/to/config.json
 
 # Retrieve a memory
 file-memory get project_progress
@@ -69,7 +70,28 @@ file-memory update project_progress '{"status": "done"}'
 file-memory delete project_progress
 ```
 
-### Python API
+## Configuration
+
+### Environment Variables
+
+```bash
+# Override default memory directory
+export FILE_MEMORY_DIR="/path/to/memories"
+```
+
+### CLI Option
+
+```bash
+file-memory --dir /custom/path get my_key
+```
+
+### Default Memory Location
+
+```
+~/Documents/opencode/file_memory
+```
+
+## Python API
 
 ```python
 from file_memory import MemoryStore
@@ -103,54 +125,90 @@ store.update("project_x", {"status": "done"})
 store.delete("project_x")
 ```
 
-## Configuration
-
-### Environment Variables
-
-```bash
-# Override default memory directory
-export FILE_MEMORY_DIR="/path/to/memories"
-```
-
-### CLI Option
-
-```bash
-file-memory --dir /custom/path get my_key
-```
-
-## Default Memory Location
-
-```
-~/Documents/opencode/file_memory
-```
-
 ## OpenCode Integration
 
 This package includes built-in integration for OpenCode:
 
-### Skill
+### Setup (Manual)
 
-Load the file-memory skill to let OpenCode know how to use this tool:
+1. Symlink the skill and commands to your OpenCode config:
 
+```bash
+mkdir -p ~/.config/opencode/skills ~/.config/opencode/commands
+ln -sf /path/to/file-memory/.opencode/skills/file-memory ~/.config/opencode/skills/
+ln -sf /path/to/file-memory/.opencode/commands/*.md ~/.config/opencode/commands/
 ```
-skill({ name: "file-memory" })
+
+2. Ensure `file-memory` CLI is in your PATH:
+
+```bash
+ln -sf /path/to/file-memory/.venv/bin/file-memory ~/.local/bin/
 ```
 
-### Commands
+### Usage in OpenCode
 
-Quick access slash commands are available:
+Once configured, you can use:
 
+```bash
+# In a bash block
+file-memory store my_project '{"status": "working on auth"}'
+file-memory get my_project
+file-memory list-memories
+file-memory search "auth"
+```
+
+Slash commands (if configured):
 - `/memory-store` - Store a new memory
 - `/memory-get` - Retrieve a memory
 - `/memory-list` - List all memories
 - `/memory-search` - Search memories
+
+## Storage Format
+
+### JSON Memory
+
+```json
+{
+  "schema_version": 1,
+  "metadata": {
+    "key": "my_key",
+    "format": "json",
+    "created_at": "2024-01-01T00:00:00",
+    "updated_at": "2024-01-02T00:00:00",
+    "tags": ["work", "important"]
+  },
+  "content": {
+    "status": "in_progress",
+    "goal": "ship"
+  }
+}
+```
+
+### Markdown Memory
+
+```markdown
+---
+schema_version: 1
+key: notes
+format: markdown
+created_at: '2024-01-01T00:00:00'
+updated_at: '2024-01-02T00:00:00'
+tags:
+- thoughts
+- ideas
+---
+
+# My Notes
+
+Content goes here...
+```
 
 ## Use Cases
 
 1. **Project Progress**: Track ongoing work across sessions
 2. **Long-term Goals**: Remember what you want to achieve
 3. **Tool Discovery**: Store info about tools you develop for testing
-4. **Context Sharing**: Share context between different projects
+4. **Context Sharing**: Share information across different projects
 5. **Knowledge Base**: Build a personal knowledge base
 
 ## Development
