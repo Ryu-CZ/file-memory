@@ -1,21 +1,10 @@
 ---
-description: Search memories in file-memory
+description: DEPRECATED - Use /memory-recall instead
 agent: general
 ---
 
-Search through all stored memories in file-memory.
+**DEPRECATED**: This command is deprecated. Use `/memory-recall` instead.
 
-Run:
-```
-file-memory search '$1'
-file-memory search '$1' --json
-```
+---
 
-Replace:
-- $1 = search query (matches content)
-
-Examples:
-```
-file-memory search "project"
-file-memory search "OAuth" --json
-```
+Search memories by content. For new code, use `/memory-recall <your question>` which provides intelligent search with ranked results.

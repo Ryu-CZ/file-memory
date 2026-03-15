@@ -59,14 +59,14 @@ def list_memories(
 
     if json_output:
         click.echo(json.dumps([e.to_dict() for e in entries], indent=2, default=str))
-    else:
-        if not entries:
-            click.echo("No memories found.")
-            return
+        return
+    if not entries:
+        click.echo("No memories found.")
+        return
 
-        for entry in entries:
-            tags_str = f" [{', '.join(entry.metadata.tags)}]" if entry.metadata.tags else ""
-            click.echo(f"{entry.metadata.key} ({entry.metadata.format}){tags_str}")
+    for entry in entries:
+        tags_str = f" [{', '.join(entry.metadata.tags)}]" if entry.metadata.tags else ""
+        click.echo(f"{entry.metadata.key} ({entry.metadata.format}){tags_str}")
 
 
 @cli.command()
@@ -78,6 +78,13 @@ def list_memories(
     type=click.Choice(["json", "markdown"]),
     default="json",
     help="Memory format",
+)
+@click.option(
+    "--type",
+    "memory_type",
+    type=click.Choice(["episodic", "semantic", "transient"]),
+    default="semantic",
+    help="Memory type: episodic (events), semantic (facts), transient (temporary)",
 )
 @click.option(
     "--tags",
@@ -95,6 +102,7 @@ def store(
     key: str,
     value: str | None,
     fmt: str,
+    memory_type: str,
     tags: str | None,
     file_path: Path | None,
 ) -> None:
@@ -133,11 +141,11 @@ def store(
     tag_list = [t.strip() for t in tags.split(",")] if tags else []
 
     try:
-        store_obj.store(key, content, format=fmt, tags=tag_list)
+        store_obj.store(key, content, format=fmt, tags=tag_list, memory_type=memory_type)
     except (MemoryStoreError, MemoryKeyError) as e:
         handle_error(e)
 
-    click.echo(f"Stored: {key} ({fmt})")
+    click.echo(f"Stored: {key} ({fmt}, {memory_type})")
 
 
 @cli.command()

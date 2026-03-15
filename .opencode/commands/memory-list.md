@@ -1,23 +1,10 @@
 ---
-description: List all memories in file-memory
+description: DEPRECATED - Use /memory-recall instead
 agent: general
 ---
 
-List all stored memories in file-memory, optionally filtered by tag.
+**DEPRECATED**: This command is deprecated. Use `/memory-recall` instead.
 
-Run:
-```
-file-memory list-memories
-file-memory list-memories --tag $1
-file-memory list-memories --json
-```
+---
 
-Replace:
-- $1 = optional tag to filter by
-
-Examples:
-```
-file-memory list-memories
-file-memory list-memories --tag work
-file-memory list-memories --json
-```
+List all memories. For new code, use `/memory-recall <what are my memories about?>` which will return a more useful summary.

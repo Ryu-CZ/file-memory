@@ -10,6 +10,7 @@ class MemoryMetadata(BaseModel):
 
     key: str
     format: str = "json"
+    memory_type: str = "semantic"  # episodic, semantic, transient
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     tags: list[str] = Field(default_factory=list)

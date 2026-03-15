@@ -122,6 +122,7 @@ class MemoryStore:
         content: Any,
         format: str = "json",
         tags: list[str] | None = None,
+        memory_type: str = "semantic",
     ) -> MemoryEntry:
         """Store a new memory entry.
 
@@ -130,6 +131,7 @@ class MemoryStore:
             content: The content to store (dict for JSON, str for markdown).
             format: Format type ("json" or "markdown").
             tags: Optional list of tags.
+            memory_type: Type of memory - "episodic", "semantic", or "transient".
 
         Returns:
             The created MemoryEntry.
@@ -154,6 +156,7 @@ class MemoryStore:
         metadata = MemoryMetadata(
             key=key,
             format=format,
+            memory_type=memory_type,
             created_at=now,
             updated_at=now,
             tags=tags or [],

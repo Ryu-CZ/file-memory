@@ -1,13 +1,19 @@
 ---
-description: Store a memory in file-memory
+description: DEPRECATED - Use /memory-recall instead
 agent: general
+---
+
+**DEPRECATED**: This command is deprecated. Use `/memory-recall` instead.
+
 ---
 
 Store a new memory in file-memory for persistent storage across sessions.
 
-Run:
+For new code, use `/memory-capture` which intelligently decides whether to create or update memories.
+
+If you must use this directly:
 ```
-file-memory store $1 '$2' --format $3 --tags $4
+file-memory store $1 '$2' --format $3 --tags $4 --type $5
 ```
 
 Replace:
@@ -15,6 +21,7 @@ Replace:
 - $2 = content (JSON string or markdown text)
 - $3 = format (json or markdown, default: json)
 - $4 = tags (optional, comma-separated)
+- $5 = memory type: episodic, semantic (default), or transient
 
 Examples:
 ```

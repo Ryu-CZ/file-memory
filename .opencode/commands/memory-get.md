@@ -1,21 +1,10 @@
 ---
-description: Get a memory from file-memory
+description: DEPRECATED - Use /memory-recall instead
 agent: general
 ---
 
-Retrieve a stored memory from file-memory by its key.
+**DEPRECATED**: This command is deprecated. Use `/memory-recall` instead.
 
-Run:
-```
-file-memory get $1
-file-memory get $1 --json  # for JSON output
-```
+---
 
-Replace:
-- $1 = memory key to retrieve
-
-Example:
-```
-file-memory get project_status
-file-memory get project_status --json
-```
+Retrieve a memory by key. For new code, use `/memory-recall <question>` which will intelligently search and return relevant memories.
