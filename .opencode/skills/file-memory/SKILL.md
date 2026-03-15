@@ -20,7 +20,7 @@ Use file-memory when you need to:
 - **Store Long-term Goals**: Keep track of objectives you want to achieve
 - **Tool Discovery**: Remember tools the user develops for you to test
 - **Context Sharing**: Share information across different projects
-- **Knowledge Base**: Store information you want to reference later
+- **Knowledge Base**: Build a personal knowledge base
 
 ## Storage Location
 
@@ -30,18 +30,21 @@ You can override with:
 - `--dir` CLI option
 - `FILE_MEMORY_DIR` environment variable
 
-## Available Commands
+## Available CLI Commands
 
 ### Store a Memory
 
 ```bash
 file-memory store <key> '<json_or_markdown>' --format json|markdown --tags tag1,tag2
+# Or from file:
+file-memory store <key> --file /path/to/content.json --format json
 ```
 
 Examples:
 ```bash
 file-memory store project_x '{"status": "in_progress", "goal": "ship feature"}'
 file-memory store notes '# My Notes' --format markdown --tags thoughts,ideas
+file-memory store config --file config.json
 ```
 
 ### Get a Memory
@@ -56,18 +59,21 @@ file-memory get <key> --json  # JSON output for parsing
 ```bash
 file-memory list-memories
 file-memory list-memories --tag work  # Filter by tag
+file-memory list-memories --json  # JSON output
 ```
 
 ### Search
 
 ```bash
 file-memory search <query>
+file-memory search <query> --json
 ```
 
 ### Update
 
 ```bash
 file-memory update <key> '<new_content>'
+file-memory update <key> --file /path/to/new_content.json
 ```
 
 ### Delete
@@ -80,28 +86,29 @@ file-memory delete <key>
 
 ```bash
 file-memory list-tags
+file-memory list-tags --json
 ```
 
-## How to Use Me
+## How to Use Me in OpenCode
 
-### In Conversation
+### Direct CLI Usage
 
-When the user mentions storing something for later, remembering progress, or referencing previous work:
+Simply run the `file-memory` command in a bash block:
 
-1. Use `file-memory store <key> <value>` to save information
-2. Use `file-memory get <key>` to retrieve it
-3. Use `file-memory list-memories` to see all stored memories
+```
+file-memory store project_progress '{"status": "working on auth", "goal": "ship OAuth"}'
+file-memory get project_progress
+file-memory list-memories
+file-memory search "OAuth"
+```
 
-### Example Prompts
+### Slash Commands
 
-User: "Remember I'm working on the authentication feature"
-→ Store: `file-memory store auth_feature '{"status": "in_progress", "task": "authentication", "goal": "add OAuth"}'`
-
-User: "What was I working on last time?"
-→ Run: `file-memory list-memories`
-
-User: "Find my notes about the API"
-→ Run: `file-memory search API`
+Available commands (if configured):
+- `/memory-store` - Store a new memory
+- `/memory-get` - Retrieve a memory  
+- `/memory-list` - List all memories
+- `/memory-search` - Search memories
 
 ## Best Practices
 
@@ -112,7 +119,7 @@ User: "Find my notes about the API"
 
 ## Output Format
 
-When retrieving memories with `--json`, the output is:
+When retrieving memories with `--json`, the output follows this schema:
 
 ```json
 {
@@ -123,7 +130,7 @@ When retrieving memories with `--json`, the output is:
     "updated_at": "2024-01-02T00:00:00",
     "tags": ["work", "important"]
   },
-  "content": "{...}"
+  "content": {...}
 }
 ```
 
@@ -131,5 +138,5 @@ When retrieving memories with `--json`, the output is:
 
 - Memories persist indefinitely until deleted
 - Each memory is stored as a separate file (key.json or key.md)
-- OpenCode can discover this skill automatically
-- You can load this skill using the `skill` tool
+- Schema version is tracked for future compatibility
+- Key collisions are detected and prevented

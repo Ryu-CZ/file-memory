@@ -5,9 +5,17 @@ agent: general
 
 Retrieve a stored memory from file-memory by its key.
 
-Run: `file-memory get $1 --json`
+Run:
+```
+file-memory get $1
+file-memory get $1 --json  # for JSON output
+```
 
 Replace:
 - $1 = memory key to retrieve
 
-Example: `file-memory get project_status --json`
+Example:
+```
+file-memory get project_status
+file-memory get project_status --json
+```
