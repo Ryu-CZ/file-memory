@@ -8,10 +8,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from file_memory.config import ensure_memory_dir, get_memory_dir
 from file_memory.models import MemoryEntry, MemoryMetadata
 
 logger = logging.getLogger(__name__)
+
+CURRENT_SCHEMA_VERSION = 1
 
 
 class MemoryStoreError(Exception):
@@ -22,6 +26,18 @@ class MemoryStoreError(Exception):
 
 class MemoryNotFoundError(MemoryStoreError):
     """Raised when a memory entry is not found."""
+
+    pass
+
+
+class MemoryKeyError(MemoryStoreError):
+    """Raised for invalid or conflicting memory keys."""
+
+    pass
+
+
+class MemoryParseError(MemoryStoreError):
+    """Raised when a memory file cannot be parsed."""
 
     pass
 
@@ -63,9 +79,42 @@ class MemoryStore:
 
         Returns:
             Sanitized key safe for filesystem use.
+
+        Raises:
+            MemoryKeyError: If key is empty after sanitization.
         """
+        if not key or not key.strip():
+            raise MemoryKeyError("Key cannot be empty")
+
         safe = re.sub(r"[^\w\-.]", "_", key)
-        return safe[:200]
+        safe = safe[:200]
+
+        if not safe:
+            raise MemoryKeyError(f"Key '{key}' produces invalid filename")
+
+        return safe
+
+    def _check_key_collision(self, key: str, format: str, existing_key: str | None = None) -> None:
+        """Check for key collisions after sanitization.
+
+        Args:
+            key: Original key provided by user.
+            format: Format being stored.
+            existing_key: If updating, the key that currently exists.
+
+        Raises:
+            MemoryKeyError: If sanitized key collides with existing file.
+        """
+        safe_key = self._sanitize_key(key)
+
+        for fmt in self.VALID_FORMATS:
+            file_path = self.base_dir / f"{safe_key}.{'json' if fmt == 'json' else 'md'}"
+            if file_path.exists():
+                if existing_key and self._sanitize_key(existing_key) == safe_key:
+                    continue
+                raise MemoryKeyError(
+                    f"Key '{key}' sanitizes to '{safe_key}' which collides with existing memory"
+                )
 
     def store(
         self,
@@ -87,6 +136,7 @@ class MemoryStore:
 
         Raises:
             MemoryStoreError: If format is invalid.
+            MemoryKeyError: If key is invalid or collides.
         """
         if format not in self.VALID_FORMATS:
             raise MemoryStoreError(f"Invalid format: {format}. Must be one of {self.VALID_FORMATS}")
@@ -97,10 +147,9 @@ class MemoryStore:
         if format == "markdown" and not isinstance(content, str):
             raise MemoryStoreError("Markdown format requires string content")
 
-        file_path = self._get_file_path(key, format)
+        self._check_key_collision(key, format)
 
         now = datetime.now()
-        content_str = json.dumps(content, indent=2) if format == "json" else str(content)
 
         metadata = MemoryMetadata(
             key=key,
@@ -110,17 +159,31 @@ class MemoryStore:
             tags=tags or [],
         )
 
-        entry = MemoryEntry(metadata=metadata, content=content_str)
+        file_path = self._get_file_path(key, format)
 
         if format == "json":
             data = {
-                "metadata": metadata.model_dump(),
-                "content": content_str,
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "metadata": metadata.model_dump(mode="json"),
+                "content": content,
             }
-            file_path.write_text(json.dumps(data, indent=2, default=str))
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=2, default=str)
+            content_str = json.dumps(content, indent=2)
         else:
-            frontmatter = json.dumps(metadata.model_dump(), default=str)
-            file_path.write_text(f"---\n{frontmatter}\n---\n\n{content_str}")
+            frontmatter = {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                **metadata.model_dump(mode="json"),
+            }
+            with open(file_path, "w") as f:
+                f.write("---\n")
+                yaml.dump(frontmatter, f, default_flow_style=False, sort_keys=False)
+                f.write("---\n\n")
+                f.write(str(content))
+
+            content_str = str(content)
+
+        entry = MemoryEntry(metadata=metadata, content=content_str)
 
         logger.info(f"Stored memory: {key} at {file_path}")
         return entry
@@ -137,8 +200,10 @@ class MemoryStore:
         Raises:
             MemoryNotFoundError: If the memory doesn't exist.
         """
+        safe_key = self._sanitize_key(key)
+
         for fmt in self.VALID_FORMATS:
-            file_path = self._get_file_path(key, fmt)
+            file_path = self.base_dir / f"{safe_key}.{'json' if fmt == 'json' else 'md'}"
             if file_path.exists():
                 return self._read_entry(file_path, fmt)
 
@@ -153,30 +218,108 @@ class MemoryStore:
 
         Returns:
             The MemoryEntry.
+
+        Raises:
+            MemoryParseError: If the file cannot be parsed.
         """
-        content = file_path.read_text()
+        try:
+            content = file_path.read_text()
+        except Exception as e:
+            raise MemoryParseError(f"Cannot read {file_path}: {e}") from e
 
         if format == "json":
-            data = json.loads(content)
-            return MemoryEntry(
-                metadata=MemoryMetadata(**data["metadata"]),
-                content=data["content"],
-            )
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError as e:
+                raise MemoryParseError(f"Invalid JSON in {file_path}: {e}") from e
+
+            if not isinstance(data, dict):
+                raise MemoryParseError(f"Invalid JSON structure in {file_path}")
+
+            schema_version = data.get("schema_version", 0)
+
+            if schema_version == 0:
+                return self._read_legacy_json(file_path, data)
+            elif schema_version == 1:
+                metadata = MemoryMetadata(**data["metadata"])
+                content_value = data["content"]
+                content_str = json.dumps(content_value, indent=2)
+                return MemoryEntry(metadata=metadata, content=content_str)
+            else:
+                raise MemoryParseError(f"Unknown schema version {schema_version} in {file_path}")
         else:
-            if content.startswith("---"):
-                parts = content.split("---", 2)
-                if len(parts) >= 3:
-                    frontmatter = json.loads(parts[1].strip())
-                    markdown_content = parts[2].strip()
-                    return MemoryEntry(
-                        metadata=MemoryMetadata(**frontmatter),
-                        content=markdown_content,
+            return self._read_markdown(file_path, content)
+
+    def _read_legacy_json(self, file_path: Path, data: dict) -> MemoryEntry:
+        """Read legacy JSON format (schema v0 - content as string).
+
+        Args:
+            file_path: Path to the file.
+            data: Parsed JSON data.
+
+        Returns:
+            The MemoryEntry.
+        """
+        metadata = MemoryMetadata(**data["metadata"])
+
+        content_str = data.get("content", "")
+        if isinstance(content_str, str):
+            try:
+                content_value = json.loads(content_str)
+            except json.JSONDecodeError:
+                content_value = {"raw": content_str}
+        else:
+            content_value = content_str
+
+        normalized_content = json.dumps(content_value, indent=2)
+
+        return MemoryEntry(metadata=metadata, content=normalized_content)
+
+    def _read_markdown(self, file_path: Path, content: str) -> MemoryEntry:
+        """Read a markdown memory entry.
+
+        Supports both new YAML frontmatter and legacy JSON frontmatter.
+
+        Args:
+            file_path: Path to the file.
+            content: File content.
+
+        Returns:
+            The MemoryEntry.
+        """
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                frontmatter_str = parts[1].strip()
+                markdown_content = parts[2].strip()
+
+                try:
+                    frontmatter = yaml.safe_load(frontmatter_str)
+                except yaml.YAMLError:
+                    try:
+                        frontmatter = json.loads(frontmatter_str)
+                    except json.JSONDecodeError:
+                        frontmatter = {"key": file_path.stem, "format": "markdown"}
+
+                schema_version = frontmatter.get("schema_version", 0)
+
+                if schema_version == 0:
+                    metadata = MemoryMetadata(**frontmatter)
+                else:
+                    metadata = MemoryMetadata(
+                        key=frontmatter.get("key", file_path.stem),
+                        format=frontmatter.get("format", "markdown"),
+                        created_at=frontmatter.get("created_at", datetime.now()),
+                        updated_at=frontmatter.get("updated_at", datetime.now()),
+                        tags=frontmatter.get("tags", []),
                     )
 
-            return MemoryEntry(
-                metadata=MemoryMetadata(key=file_path.stem, format="markdown"),
-                content=content,
-            )
+                return MemoryEntry(metadata=metadata, content=markdown_content)
+
+        return MemoryEntry(
+            metadata=MemoryMetadata(key=file_path.stem, format="markdown"),
+            content=content,
+        )
 
     def update(
         self,
@@ -196,10 +339,11 @@ class MemoryStore:
 
         Raises:
             MemoryNotFoundError: If the memory doesn't exist.
+            MemoryKeyError: If key collision is detected.
         """
         existing = self.get(key)
-        file_path = self._get_file_path(key, existing.metadata.format)
 
+        file_path = self._get_file_path(key, existing.metadata.format)
         now = datetime.now()
 
         if existing.metadata.format == "json":
@@ -221,17 +365,26 @@ class MemoryStore:
             tags=new_tags,
         )
 
-        entry = MemoryEntry(metadata=metadata, content=content_str)
-
         if metadata.format == "json":
             data = {
-                "metadata": metadata.model_dump(),
-                "content": content_str,
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "metadata": metadata.model_dump(mode="json"),
+                "content": content,
             }
-            file_path.write_text(json.dumps(data, indent=2, default=str))
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=2, default=str)
         else:
-            frontmatter = json.dumps(metadata.model_dump(), default=str)
-            file_path.write_text(f"---\n{frontmatter}\n---\n\n{content_str}")
+            frontmatter = {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                **metadata.model_dump(mode="json"),
+            }
+            with open(file_path, "w") as f:
+                f.write("---\n")
+                yaml.dump(frontmatter, f, default_flow_style=False, sort_keys=False)
+                f.write("---\n\n")
+                f.write(content_str)
+
+        entry = MemoryEntry(metadata=metadata, content=content_str)
 
         logger.info(f"Updated memory: {key}")
         return entry
@@ -245,8 +398,10 @@ class MemoryStore:
         Raises:
             MemoryNotFoundError: If the memory doesn't exist.
         """
+        safe_key = self._sanitize_key(key)
+
         for fmt in self.VALID_FORMATS:
-            file_path = self._get_file_path(key, fmt)
+            file_path = self.base_dir / f"{safe_key}.{'json' if fmt == 'json' else 'md'}"
             if file_path.exists():
                 file_path.unlink()
                 logger.info(f"Deleted memory: {key}")
@@ -261,17 +416,21 @@ class MemoryStore:
             tag: Optional tag to filter by.
 
         Yields:
-            MemoryEntry objects.
+            MemoryEntry objects in sorted order by key.
         """
-        for file_path in self.base_dir.iterdir():
+        entries: list[MemoryEntry] = []
+
+        for file_path in sorted(self.base_dir.iterdir()):
             if file_path.is_file() and file_path.suffix in (".json", ".md"):
+                fmt = "json" if file_path.suffix == ".json" else "markdown"
                 try:
-                    fmt = "json" if file_path.suffix == ".json" else "markdown"
                     entry = self._read_entry(file_path, fmt)
                     if tag is None or tag in entry.metadata.tags:
-                        yield entry
-                except Exception as e:
-                    logger.warning(f"Failed to read {file_path}: {e}")
+                        entries.append(entry)
+                except MemoryParseError as e:
+                    logger.warning(f"Skipping invalid memory {file_path}: {e}")
+
+        yield from sorted(entries, key=lambda e: e.metadata.key)
 
     def search(self, query: str) -> Iterator[MemoryEntry]:
         """Search memory entries by content.
@@ -280,18 +439,22 @@ class MemoryStore:
             query: The search query.
 
         Yields:
-            Matching MemoryEntry objects.
+            Matching MemoryEntry objects in sorted order by key.
         """
         query_lower = query.lower()
+        results = []
+
         for entry in self.list():
             if query_lower in entry.content.lower():
-                yield entry
+                results.append(entry)
+
+        yield from sorted(results, key=lambda e: e.metadata.key)
 
     def tags(self) -> set[str]:
         """Get all unique tags across all memories.
 
         Returns:
-            Set of tag strings.
+            Sorted set of tag strings.
         """
         all_tags: set[str] = set()
         for entry in self.list():

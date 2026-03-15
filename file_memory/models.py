@@ -23,4 +23,4 @@ class MemoryEntry(BaseModel):
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
-        return self.model_dump()
+        return self.model_dump(mode="json")
